@@ -1,12 +1,12 @@
 # qec_sim
 
-Monte Carlo simulation of multi-round quantum error correction under a
-circuit-level noise model, decoded with [`relay_bp`](https://pypi.org/project/relay-bp/).
+Simulation of multi-round quantum error correction under a
+circuit-level noise model, decoded with i.e. [`relay_bp`](https://github.com/subrata-q/relay-BP).
 
 ## Install
 
 ```
-pip install "qec_sim @ git+https://github.com/<user>/<repo>.git"
+pip install "qec_sim @ git+https://github.com/subrata-q/qec_sim.git"
 ```
 
 ## Usage
