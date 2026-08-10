@@ -80,6 +80,17 @@ result = run_experiment(
     # verbose=True,
 )
 
+# make_decode_fn stores each shot's solutions here; shots=1 so this is the only
+# one. None means the shot never converged.
+print("Converged solutions:")
+if decode_fn.last_solutions is None:
+    print("  none (shot did not converge)")
+else:
+    solutions, legs = decode_fn.last_solutions
+    for leg, row in zip(np.asarray(legs), np.asarray(solutions)):
+        print(f"  leg {leg}: {''.join(str(int(b)) for b in row)}")
+
+
 print(f"Shots: {result.shots}")
 print(f"Failed shots: {result.fails} / {result.shots}")
 # Non-convergence is always scored as a failure, so it is counted in p_L above.
