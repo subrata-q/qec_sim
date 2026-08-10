@@ -36,7 +36,7 @@ from .spacetime_pcm import (
 from .error_model import NoiseModel, sample_shot, build_priors
 from .logical_ops import compute_logical_operators, logical_failure
 from .simulate import run_experiment, wilson_interval, ExperimentResult
-from .logging_utils import ShotLogger, bitstring
+from .logging_utils import ShotLogger, SolutionLogger, bitstring
 from .relay_bp_integrate import (
     build_decoder,
     make_decode_fn,
@@ -60,6 +60,7 @@ __all__ = [
     "wilson_interval",
     "ExperimentResult",
     "ShotLogger",
+    "SolutionLogger",
     "bitstring",
     "build_decoder",
     "make_decode_fn",

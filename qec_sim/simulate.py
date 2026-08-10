@@ -7,13 +7,15 @@ and report the logical error rate with a confidence interval.
 """
 
 from __future__ import annotations
+
+import warnings
 from dataclasses import dataclass, field
 import numpy as np
 
 from .spacetime_pcm import generate_space_time_pcm, build_spatial_matrix
 from .error_model import NoiseModel, sample_shot
 from .logical_ops import compute_logical_operators, logical_failure
-from .logging_utils import ShotLogger
+from .logging_utils import ShotLogger, SolutionLogger
 
 
 def _mode_of(H_Z, H_Y) -> str:
@@ -160,6 +162,7 @@ def run_experiment(
     seed: int | None = None,
     decode_fn=None,
     log_dir: str | None = None,
+    solutions_dir: str | None = None,
 ) -> ExperimentResult:
     """Run a Monte Carlo simulation of a multi-round space-time QEC code.
 
@@ -186,6 +189,12 @@ def run_experiment(
             returned, convergence is assumed True. Required.
         log_dir: If given, write per-shot syndromes/corrections/outcomes
             to this directory via `logging_utils.ShotLogger`.
+        solutions_dir: If given, write each shot's converged solutions to
+            `sol_<shot>.txt` in this directory via
+            `logging_utils.SolutionLogger`, one block per converged relay leg.
+            Requires only that the decoder was built with
+            `collect_solutions=True`; `make_decode_fn` forwards them
+            automatically. Warns if no solutions ever arrive.
 
     Returns:
         `ExperimentResult` summarizing the run.
@@ -208,23 +217,37 @@ def run_experiment(
     _user_decode_fn = decode_fn
 
     def decode_fn_wrapper(detectors):
-        # Normalize decode_fn's return value to always be (correction, converged).
+        # Normalize decode_fn's return value to (correction, converged, solutions).
+        # decode_fn may return a bare correction, (correction, converged), or
+        # (correction, converged, (solutions, legs)).
         out = _user_decode_fn(detectors)
-        if isinstance(out, tuple):
-            return np.asarray(out[0], dtype=np.uint8), bool(out[1])
-        return np.asarray(out, dtype=np.uint8), True
+        if not isinstance(out, tuple):
+            correction, converged, solutions = np.asarray(out, dtype=np.uint8), True, None
+        else:
+            correction = np.asarray(out[0], dtype=np.uint8)
+            converged = bool(out[1])
+            solutions = out[2] if len(out) > 2 else None
+        if solutions is None:
+            # `make_decode_fn` publishes them here rather than in the return
+            # value, so the (correction, converged) contract stays unchanged.
+            solutions = getattr(_user_decode_fn, "last_solutions", None)
+        return correction, converged, solutions
 
     rng = np.random.default_rng(seed)
     per_shot_success = np.zeros(shots, dtype=bool)
     nonconvergence = 0
 
     logger = ShotLogger(log_dir) if log_dir is not None else None
+    sol_logger = (
+        SolutionLogger(solutions_dir) if solutions_dir is not None else None
+    )
+    saw_solutions = False
     try:
         for s in range(shots):
             e_full, true_residual = sample_shot(rng, mode, n, r, m_total, noise)
             # Detector (syndrome) pattern triggered by this shot's faults.
             detectors = (H_st @ e_full) % 2
-            decoded_full, converged = decode_fn_wrapper(detectors)
+            decoded_full, converged, solutions = decode_fn_wrapper(detectors)
             if not converged:
                 nonconvergence += 1
             decoded_residual = _decoded_residual(decoded_full, mode, n, r)
@@ -234,9 +257,22 @@ def run_experiment(
             per_shot_success[s] = not failed
             if logger is not None:
                 logger.log(detectors, decoded_full, failed)
+            if sol_logger is not None:
+                if solutions is not None:
+                    saw_solutions = True
+                    sol_logger.log(s, *solutions)
     finally:
         if logger is not None:
             logger.close()
+
+    if sol_logger is not None and not saw_solutions:
+        warnings.warn(
+            f"solutions_dir={solutions_dir!r} was given but the decoder never "
+            "reported any solutions, so nothing was written. Build the decoder "
+            "with collect_solutions=True to enable them.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     fails = shots - int(per_shot_success.sum())
     p_L, lo, hi = wilson_interval(fails, shots)
