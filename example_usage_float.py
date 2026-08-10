@@ -14,7 +14,7 @@ from qec_sim import (
 # Code parameters (3-qubit repetition code).
 H_X = np.array([[1, 1, 0], [0, 1, 1]], dtype=np.uint8)
 r = 5
-noise = NoiseModel(px=0.005, p_meas=0.005)
+noise = NoiseModel(px=0.005, py=0.005, p_meas=0.005)
 
 H_st = generate_space_time_pcm(r, H_X)
 m_total = build_spatial_matrix(H_X).shape[0]
