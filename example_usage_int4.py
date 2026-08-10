@@ -9,14 +9,31 @@ from qec_sim import (
     build_priors,
     build_decoder,
     make_decode_fn,
+    DEFAULT_RELAY_KWARGS,
+    RELAY_KWARGS_INT,
 )
+
+DEFAULT_RELAY_KWARGS: dict = {
+    # "gamma0": 0.65,
+    "pre_iter": 1,
+    "num_sets": 1,
+    "set_max_iter": 1,
+    # "gamma_dist_interval": (-0.24, 0.66),
+    # "stop_nconv": 5,
+}
+
+DEFAULT_RELAY_KWARGS["num_sets"] = 1
+
 
 # Code parameters (3-qubit repetition code).
 H_X = np.array([[1, 1, 0], [0, 1, 1]], dtype=np.uint8)
-r = 5
-noise = NoiseModel(px=0.005, p_meas=0.005)
+r = 3
+noise = NoiseModel(px=0.1, p_meas=0.005)
 
 H_st = generate_space_time_pcm(r, H_X)
+
+np.savetxt("H_st.txt", H_st.todense(), fmt="%d")
+
 m_total = build_spatial_matrix(H_X).shape[0]
 priors = build_priors("single", n=3, r=r, m_total=m_total, noise=noise)
 
@@ -24,19 +41,25 @@ decoder_i8 = build_decoder(
     H_st,
     priors,
     decoder_class=relay_bp.RelayDecoderI8,
-    max_data_value=8.0,
+    max_data_value=127.0,
     data_scale_value=4.0,
+    verbose=True,
+    pre_iter=1,
+    set_max_iter=1,  # Keyword override
+    stop_nconv=1,  # Keyword override
+    num_sets=1,  # Keyword override
 )
 decode_fn = make_decode_fn(decoder_i8)
 
 result = run_experiment(
     H_X,
     r=r,
-    shots=2000,
+    shots=1,
     noise=noise,
-    seed=4,
+    seed=9,
     decode_fn=decode_fn,
     log_dir="logs/int4",
+    # verbose=True,
 )
 
 print(f"Shots: {result.shots}")
