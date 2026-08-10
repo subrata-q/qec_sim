@@ -16,6 +16,10 @@ import relay_bp
 # (e.g. RelayDecoderF32). Tuned as reasonable general-purpose defaults;
 # override via **relay_kwargs in build_decoder or by mutating this dict.
 DEFAULT_RELAY_KWARGS: dict = {
+    # Seeds relay's gamma-sampling RNG. Fixed by default so runs reproduce;
+    # relay_bp's own default is also 0. Min-sum decoders take no seed because
+    # they have no random component.
+    "seed": 0,
     "gamma0": 0.65,
     "pre_iter": 80,
     "num_sets": 100,
