@@ -137,10 +137,12 @@ def make_decode_fn(decoder):
     """Wrap a relay_bp decoder instance for use as `run_experiment`'s `decode_fn`.
 
     If the decoder was built with `collect_solutions=True`, each call also
-    stashes that shot's converged solutions on the returned callable as
+    stashes that shot's per-leg solutions on the returned callable as
     `decode_fn.last_solutions`, which is where `run_experiment` picks them up
     for `solutions_dir`. No extra flag is needed here — passing
-    `collect_solutions=True` to the decoder is what turns it on.
+    `collect_solutions=True` to the decoder is what turns it on. Add
+    `collect_all_legs=True` as well to keep the legs that failed to converge,
+    which show up as rows with `converged[i] == False`.
 
     Args:
         decoder: An instantiated relay_bp decoder (e.g. from `build_decoder`)
@@ -150,8 +152,8 @@ def make_decode_fn(decoder):
         Callable `decode_fn(detectors) -> (correction, converged)` where
         `correction` is a uint8 array over all space-time PCM columns and
         `converged` is whether the decoder reports success. The callable also
-        carries `last_solutions`: a `(solutions, legs)` pair for the most
-        recent call, or `None` if the decoder does not collect them.
+        carries `last_solutions`: a `(solutions, legs, converged)` triple for
+        the most recent call, or `None` if the decoder does not collect them.
     """
 
     def decode_fn(detectors):
@@ -160,7 +162,9 @@ def make_decode_fn(decoder):
         # collect_solutions=True, which keeps this a no-op by default.
         solutions = getattr(result, "solutions", None)
         decode_fn.last_solutions = (
-            None if solutions is None else (solutions, result.solution_legs)
+            None
+            if solutions is None
+            else (solutions, result.solution_legs, result.solution_converged)
         )
         return np.asarray(result.decoding, dtype=np.uint8), bool(result.success)
 

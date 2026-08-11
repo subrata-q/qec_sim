@@ -190,12 +190,14 @@ def run_experiment(
             returned, convergence is assumed True. Required.
         log_dir: If given, write per-shot syndromes/corrections/outcomes
             to this directory via `logging_utils.ShotLogger`.
-        solutions_dir: If given, write each shot's converged solutions to
+        solutions_dir: If given, write each shot's per-leg solutions to
             `sol_<shot>.txt` in this directory via
-            `logging_utils.SolutionLogger`, one block per converged relay leg.
+            `logging_utils.SolutionLogger`, one block per recorded relay leg.
             Requires only that the decoder was built with
             `collect_solutions=True`; `make_decode_fn` forwards them
-            automatically. Warns if no solutions ever arrive.
+            automatically. Add `collect_all_legs=True` to the decoder to
+            record the non-converged legs too. Warns if no solutions ever
+            arrive.
         perfect_first_round: If True, round 0's measurements are treated as
             noiseless: its measurement-flip columns are dropped from the
             space-time PCM and no flips are sampled for it (see
@@ -228,7 +230,7 @@ def run_experiment(
     def decode_fn_wrapper(detectors):
         # Normalize decode_fn's return value to (correction, converged, solutions).
         # decode_fn may return a bare correction, (correction, converged), or
-        # (correction, converged, (solutions, legs)).
+        # (correction, converged, (solutions, legs, leg_converged)).
         out = _user_decode_fn(detectors)
         if not isinstance(out, tuple):
             correction, converged, solutions = np.asarray(out, dtype=np.uint8), True, None

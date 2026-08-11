@@ -19,17 +19,19 @@ def bitstring(arr) -> str:
 
 
 class SolutionLogger:
-    """Writes one shot's converged solutions to its own file.
+    """Writes one shot's per-leg solutions to its own file.
 
     Creates `sol_<shot>.txt` under `solutions_dir`, 1-indexed, so shot 1 lands
-    in `sol_1.txt`. Inside a file there is one block per converged relay leg —
-    a `# leg <i>` header followed by the solution bitstring — with a blank line
-    between blocks.
+    in `sol_1.txt`. Inside a file there is one block per recorded relay leg —
+    a `# leg <i> converged=<0|1>` header followed by the solution bitstring —
+    with a blank line between blocks.
 
-    There are at most `stop_nconv` blocks, since the decoder stops once that
-    many legs have converged, and fewer if it ran out of legs first. A shot
-    that never converged produces **no file at all**, so a missing
-    `sol_<shot>.txt` means that shot found no solution.
+    By default the decoder records only converged legs, so every block reads
+    `converged=1`, there are at most `stop_nconv` of them, and a shot that
+    never converged produces **no file at all** — a missing `sol_<shot>.txt`
+    means that shot found no solution. Build the decoder with
+    `collect_all_legs=True` to get a block for every leg that ran, including
+    the failed ones (`converged=0`); every shot then writes a file.
     """
 
     def __init__(self, solutions_dir: str):
@@ -48,19 +50,25 @@ class SolutionLogger:
         for stale in self.solutions_dir.glob("sol_*.txt"):
             stale.unlink()
 
-    def log(self, shot_index: int, solutions, legs) -> None:
-        """Write one shot's converged solutions, one block per leg.
+    def log(self, shot_index: int, solutions, legs, converged=None) -> None:
+        """Write one shot's recorded solutions, one block per leg.
 
-        Writes nothing when there are no solutions — either the shot never
-        converged, or the decoder was not built with `collect_solutions=True`.
+        Writes nothing when there are no solutions — either the decoder was
+        not built with `collect_solutions=True`, or it recorded converged legs
+        only (the default) and this shot never converged.
 
         Args:
             shot_index: 0-based shot number; the file is named with
                 `shot_index + 1`.
-            solutions: (num_conv, n) array of converged solutions, one row per
-                converged leg, as returned by `DecodeResult.solutions`.
-            legs: Length-`num_conv` array giving each row's relay leg, as
-                returned by `DecodeResult.solution_legs`.
+            solutions: (rows, n) array of solutions, one row per recorded leg,
+                as returned by `DecodeResult.solutions`.
+            legs: Length-`rows` array giving each row's relay leg, as returned
+                by `DecodeResult.solution_legs`.
+            converged: Length-`rows` bool array flagging which rows came from
+                a leg that converged, as returned by
+                `DecodeResult.solution_converged`. `None` is treated as
+                all-converged, which is what the default collection mode
+                records.
         """
         if solutions is None or legs is None:
             return
@@ -68,11 +76,17 @@ class SolutionLogger:
         solutions = np.atleast_2d(np.asarray(solutions))
         legs = np.asarray(legs).ravel()
         if legs.size == 0:
-            # Nothing converged for this shot: leave no file behind.
+            # Nothing recorded for this shot: leave no file behind.
             return
+        flags = (
+            np.ones(legs.size, dtype=bool)
+            if converged is None
+            else np.asarray(converged).ravel().astype(bool)
+        )
 
         blocks = [
-            f"# leg {leg}\n{bitstring(row)}" for leg, row in zip(legs.tolist(), solutions)
+            f"# leg {leg} converged={int(ok)}\n{bitstring(row)}"
+            for leg, ok, row in zip(legs.tolist(), flags.tolist(), solutions)
         ]
         path = self.solutions_dir / f"sol_{shot_index + 1}.txt"
         path.write_text("\n\n".join(blocks) + "\n")
