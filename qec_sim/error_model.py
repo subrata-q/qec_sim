@@ -83,6 +83,7 @@ def sample_shot(
     r: int,
     m_total: int,
     noise: NoiseModel,
+    perfect_first_round: bool = False,
 ):
     """Sample one Monte Carlo shot: a full space-time fault vector.
 
@@ -101,12 +102,18 @@ def sample_shot(
         m_total: Total number of checks per round (rows of the spatial
             check matrix), used to size the measurement-flip block.
         noise: Physical error rates to sample from.
+        perfect_first_round: If True, round 0's measurements are noiseless
+            and no flips are drawn for it, so the measurement block covers
+            rounds 1..r-1 only. Must match the flag passed to
+            `spacetime_pcm.generate_space_time_pcm`.
 
     Returns:
         Tuple `(e_full, true_residual)`:
-            e_full: uint8 array of length `r*n_cols + r*m_total` (data
-                faults across all rounds, then measurement flips across
-                all rounds) — the full space-time fault vector.
+            e_full: uint8 array of length `r*n_cols + r_meas*m_total`
+                (data faults across all rounds, then measurement flips
+                across all noisy rounds, where `r_meas` is `r-1` under
+                `perfect_first_round` and `r` otherwise) — the full
+                space-time fault vector.
             true_residual: dict mapping channel name(s) to the true
                 round-parity residual per qubit (XOR of that channel's
                 fault across all rounds), used later to score logical
@@ -127,7 +134,8 @@ def sample_shot(
             "ex": (ex.sum(axis=0) % 2).astype(np.uint8),
         }
 
-    meas = (rng.random((r, m_total)) < noise.p_meas).astype(np.uint8)
+    r_meas = r - 1 if perfect_first_round else r
+    meas = (rng.random((r_meas, m_total)) < noise.p_meas).astype(np.uint8)
     meas_flat = meas.reshape(-1)
 
     e_full = np.concatenate([data_flat, meas_flat]).astype(np.uint8)
@@ -135,7 +143,12 @@ def sample_shot(
 
 
 def build_priors(
-    mode: str, n: int, r: int, m_total: int, noise: NoiseModel
+    mode: str,
+    n: int,
+    r: int,
+    m_total: int,
+    noise: NoiseModel,
+    perfect_first_round: bool = False,
 ) -> np.ndarray:
     """Build the per-column prior fault probabilities for the decoder.
 
@@ -151,6 +164,9 @@ def build_priors(
         r: Number of rounds.
         m_total: Total number of checks per round.
         noise: Physical error rates to derive priors from.
+        perfect_first_round: If True, round 0 contributes no
+            measurement-flip priors, matching the columns dropped by
+            `spacetime_pcm.generate_space_time_pcm` under the same flag.
 
     Returns:
         1D float64 array of priors, one per space-time PCM column.
@@ -163,5 +179,6 @@ def build_priors(
         ex_prior = noise.px + noise.py
         per_round = np.concatenate([np.full(n, ez_prior), np.full(n, ex_prior)])
     data_priors = np.tile(per_round, r)
-    meas_priors = np.full(r * m_total, noise.p_meas, dtype=np.float64)
+    r_meas = r - 1 if perfect_first_round else r
+    meas_priors = np.full(r_meas * m_total, noise.p_meas, dtype=np.float64)
     return np.concatenate([data_priors, meas_priors])

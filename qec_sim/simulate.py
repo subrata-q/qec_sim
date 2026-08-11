@@ -163,6 +163,7 @@ def run_experiment(
     decode_fn=None,
     log_dir: str | None = None,
     solutions_dir: str | None = None,
+    perfect_first_round: bool = False,
 ) -> ExperimentResult:
     """Run a Monte Carlo simulation of a multi-round space-time QEC code.
 
@@ -195,6 +196,12 @@ def run_experiment(
             Requires only that the decoder was built with
             `collect_solutions=True`; `make_decode_fn` forwards them
             automatically. Warns if no solutions ever arrive.
+        perfect_first_round: If True, round 0's measurements are treated as
+            noiseless: its measurement-flip columns are dropped from the
+            space-time PCM and no flips are sampled for it (see
+            `spacetime_pcm.generate_space_time_pcm`). The priors passed to
+            `decode_fn`'s decoder must have been built with the same flag,
+            or the decoder will reject the column count.
 
     Returns:
         `ExperimentResult` summarizing the run.
@@ -211,7 +218,9 @@ def run_experiment(
     H_spatial = build_spatial_matrix(H_X, H_Z, H_Y)
     m_total = H_spatial.shape[0]
 
-    H_st = generate_space_time_pcm(r, H_X, H_Z, H_Y, sparse=True)
+    H_st = generate_space_time_pcm(
+        r, H_X, H_Z, H_Y, sparse=True, perfect_first_round=perfect_first_round
+    )
     logical_ops = compute_logical_operators(H_X, H_Z, H_Y)
 
     _user_decode_fn = decode_fn
@@ -244,7 +253,9 @@ def run_experiment(
     saw_solutions = False
     try:
         for s in range(shots):
-            e_full, true_residual = sample_shot(rng, mode, n, r, m_total, noise)
+            e_full, true_residual = sample_shot(
+                rng, mode, n, r, m_total, noise, perfect_first_round
+            )
             # Detector (syndrome) pattern triggered by this shot's faults.
             detectors = (H_st @ e_full) % 2
             decoded_full, converged, solutions = decode_fn_wrapper(detectors)

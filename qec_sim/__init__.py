@@ -6,7 +6,9 @@ decoded with `relay_bp`:
 
 - `spacetime_pcm`: builds the space-time parity-check matrix (PCM) that
   unrolls a single-round check matrix over `r` rounds, linking measurement
-  rounds via a temporal difference matrix.
+  rounds via a temporal difference matrix. Pass `perfect_first_round=True`
+  (to it, `build_priors`, `sample_shot`, and `run_experiment` alike) to
+  model round 0's measurements as noiseless, dropping their columns.
 - `error_model`: defines the physical noise channel (`NoiseModel`) and
   samples fault vectors / per-column error priors for a shot.
 - `logical_ops`: computes logical operator bases (over GF(2)) and checks

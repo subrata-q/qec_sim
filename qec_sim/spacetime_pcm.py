@@ -87,6 +87,7 @@ def generate_space_time_pcm(
     H_Z: np.ndarray | None = None,
     H_Y: np.ndarray | None = None,
     sparse: bool = True,
+    perfect_first_round: bool = False,
 ):
     """Generate the full space-time PCM over `r` rounds.
 
@@ -112,6 +113,13 @@ def generate_space_time_pcm(
         H_Y: Y-type check matrix; enables "xyz" mode.
         sparse: If True, return a `scipy.sparse.csr_matrix`; if False,
             return a dense uint8 `numpy.ndarray`.
+        perfect_first_round: If True, model round 0's measurements as
+            noiseless: its `m_total` measurement-flip columns are omitted
+            entirely (the first block column of `delta_r`), leaving
+            `r*n_cols + (r-1)*m_total` columns. Data columns keep their
+            positions, since the omitted block is at the tail. Callers
+            must pass the same flag to `error_model.sample_shot` and
+            `error_model.build_priors` so the column orders still agree.
 
     Returns:
         The space-time PCM, mod-2 reduced, in sparse or dense form.
@@ -119,6 +127,11 @@ def generate_space_time_pcm(
     H_spatial = build_spatial_matrix(H_X, H_Z, H_Y)
     m_total, _ = H_spatial.shape
     delta_r = build_delta_r(r)
+    if perfect_first_round:
+        # Round 0's measurement flips are forced to zero, so their columns
+        # carry no information -- drop delta_r's first block column. The
+        # round-0 detectors then depend only on round-0 data faults.
+        delta_r = delta_r[:, 1:]
 
     Hs = csr_matrix(H_spatial)
     Ir = eye(r, format="csr", dtype=np.uint8)
