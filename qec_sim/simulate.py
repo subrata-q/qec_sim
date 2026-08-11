@@ -248,6 +248,9 @@ def run_experiment(
             # `make_decode_fn` publishes them here rather than in the return
             # value, so the (correction, converged) contract stays unchanged.
             solutions = getattr(_user_decode_fn, "last_solutions", None)
+        print(f"decode_fn_wrapper: solutions={solutions}")
+        print(f"decode_fn_wrapper: converged={converged}")
+        print(f"decode_fn_wrapper: correction={correction}")
         return correction, converged, solutions
 
     rng = np.random.default_rng(seed)
