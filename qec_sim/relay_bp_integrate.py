@@ -133,7 +133,7 @@ def build_decoder(
         ) from e
 
 
-def make_decode_fn(decoder):
+def make_decode_fn(decoder, keep_history: bool = False):
     """Wrap a relay_bp decoder instance for use as `run_experiment`'s `decode_fn`.
 
     If the decoder was built with `collect_solutions=True`, each call also
@@ -144,16 +144,34 @@ def make_decode_fn(decoder):
     `collect_all_legs=True` as well to keep the legs that failed to converge,
     which show up as rows with `converged[i] == False`.
 
+    `last_solutions` only ever holds the *most recent* shot. Pass
+    `keep_history=True` to also append every shot's record to
+    `decode_fn.solutions_history`, so a multi-shot `run_experiment` leaves the
+    whole run inspectable in memory rather than just its final shot. The
+    alternative is `run_experiment(solutions_dir=...)`, which writes the same
+    information to one file per shot and does not grow with the shot count.
+
     Args:
         decoder: An instantiated relay_bp decoder (e.g. from `build_decoder`)
             exposing a `decode_detailed(detectors)` method.
+        keep_history: Retain every shot's record in `solutions_history`
+            instead of only the latest. Memory grows with the number of
+            shots — one `(rows, n)` array per shot, where `rows` is up to
+            `stop_nconv`, or up to `num_sets + 1` under `collect_all_legs` —
+            so leave it off for large runs and use `solutions_dir` instead.
 
     Returns:
         Callable `decode_fn(detectors) -> (correction, converged)` where
         `correction` is a uint8 array over all space-time PCM columns and
         `converged` is whether the decoder reports success. The callable also
-        carries `last_solutions`: a `(solutions, legs, converged)` triple for
-        the most recent call, or `None` if the decoder does not collect them.
+        carries:
+            last_solutions: a `(solutions, legs, converged)` triple for the
+                most recent call, or `None` if the decoder does not collect
+                them.
+            solutions_history: with `keep_history`, a list of those triples in
+                call order, so `solutions_history[i]` is shot `i`'s record and
+                `None` marks a shot that recorded nothing. `None` when
+                `keep_history` is False.
     """
 
     def decode_fn(detectors):
@@ -161,12 +179,18 @@ def make_decode_fn(decoder):
         # `solutions` is None unless the decoder was built with
         # collect_solutions=True, which keeps this a no-op by default.
         solutions = getattr(result, "solutions", None)
-        decode_fn.last_solutions = (
+        record = (
             None
             if solutions is None
             else (solutions, result.solution_legs, result.solution_converged)
         )
+        decode_fn.last_solutions = record
+        if decode_fn.solutions_history is not None:
+            # Each getter hands back a fresh numpy array copied out of Rust,
+            # so appending the record cannot alias the next shot's buffers.
+            decode_fn.solutions_history.append(record)
         return np.asarray(result.decoding, dtype=np.uint8), bool(result.success)
 
     decode_fn.last_solutions = None
+    decode_fn.solutions_history = [] if keep_history else None
     return decode_fn
