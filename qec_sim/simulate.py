@@ -102,7 +102,9 @@ def _decoded_residual(decoded_full: np.ndarray, mode: str, n: int, r: int):
         `error_model.sample_shot`'s `true_residual` output.
     """
     n_cols = n if mode == "single" else 2 * n
-    data_part = np.asarray(decoded_full[: r * n_cols], dtype=np.uint8).reshape(r, n_cols)
+    data_part = np.asarray(decoded_full[: r * n_cols], dtype=np.uint8).reshape(
+        r, n_cols
+    )
     if mode == "single":
         return {"single": (data_part.sum(axis=0) % 2).astype(np.uint8)}
     ez = data_part[:, :n]
@@ -233,7 +235,11 @@ def run_experiment(
         # (correction, converged, (solutions, legs, leg_converged)).
         out = _user_decode_fn(detectors)
         if not isinstance(out, tuple):
-            correction, converged, solutions = np.asarray(out, dtype=np.uint8), True, None
+            correction, converged, solutions = (
+                np.asarray(out, dtype=np.uint8),
+                True,
+                None,
+            )
         else:
             correction = np.asarray(out[0], dtype=np.uint8)
             converged = bool(out[1])
@@ -249,9 +255,7 @@ def run_experiment(
     nonconvergence = 0
 
     logger = ShotLogger(log_dir) if log_dir is not None else None
-    sol_logger = (
-        SolutionLogger(solutions_dir) if solutions_dir is not None else None
-    )
+    sol_logger = SolutionLogger(solutions_dir) if solutions_dir is not None else None
     saw_solutions = False
     try:
         for s in range(shots):
