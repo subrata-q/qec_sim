@@ -7,8 +7,13 @@ decoded with `relay_bp`:
 - `spacetime_pcm`: builds the space-time parity-check matrix (PCM) that
   unrolls a single-round check matrix over `r` rounds, linking measurement
   rounds via a temporal difference matrix. Pass `perfect_first_round=True`
-  (to it, `build_priors`, `sample_shot`, and `run_experiment` alike) to
-  model round 0's measurements as noiseless, dropping their columns.
+  and/or `perfect_last_round=True` (to it, `build_priors`, `sample_shot`,
+  and `run_experiment` alike) to model that round's measurements as
+  noiseless, dropping their columns. `perfect_last_round` is the one a
+  memory experiment usually wants: without it the final round's
+  measurement flips have no later detector to catch them, so the time
+  boundary stays open and bigger codes can decode worse. `meas_rounds`
+  reports how many rounds are left carrying measurement noise.
 - `error_model`: defines the physical noise channel (`NoiseModel`) and
   samples fault vectors / per-column error priors for a shot.
 - `logical_ops`: computes logical operator bases (over GF(2)) and checks
@@ -32,6 +37,7 @@ from .spacetime_pcm import (
     generate_space_time_pcm,
     build_spatial_matrix,
     build_delta_r,
+    meas_rounds,
     save_pcm,
     load_pcm,
 )
@@ -51,6 +57,7 @@ __all__ = [
     "generate_space_time_pcm",
     "build_spatial_matrix",
     "build_delta_r",
+    "meas_rounds",
     "save_pcm",
     "load_pcm",
     "NoiseModel",

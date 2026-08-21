@@ -166,6 +166,7 @@ def run_experiment(
     log_dir: str | None = None,
     solutions_dir: str | None = None,
     perfect_first_round: bool = False,
+    perfect_last_round: bool = False,
 ) -> ExperimentResult:
     """Run a Monte Carlo simulation of a multi-round space-time QEC code.
 
@@ -203,15 +204,22 @@ def run_experiment(
         perfect_first_round: If True, round 0's measurements are treated as
             noiseless: its measurement-flip columns are dropped from the
             space-time PCM and no flips are sampled for it (see
-            `spacetime_pcm.generate_space_time_pcm`). The priors passed to
-            `decode_fn`'s decoder must have been built with the same flag,
-            or the decoder will reject the column count.
+            `spacetime_pcm.generate_space_time_pcm`).
+        perfect_last_round: If True, the same for the final round, which
+            closes the open time boundary a memory experiment would
+            otherwise leave — usually what you want when comparing codes
+            or round counts.
+
+        The priors passed to `decode_fn`'s decoder must have been built
+        with the same flags (`error_model.build_priors` takes both), or
+        the decoder will reject the column count.
 
     Returns:
         `ExperimentResult` summarizing the run.
 
     Raises:
-        ValueError: If `decode_fn` is not provided.
+        ValueError: If `decode_fn` is not provided, or if idealizing
+            leaves no noisy round (see `spacetime_pcm.meas_rounds`).
     """
     if decode_fn is None:
         raise ValueError("run_experiment requires a valid decode_fn.")
@@ -223,7 +231,13 @@ def run_experiment(
     m_total = H_spatial.shape[0]
 
     H_st = generate_space_time_pcm(
-        r, H_X, H_Z, H_Y, sparse=True, perfect_first_round=perfect_first_round
+        r,
+        H_X,
+        H_Z,
+        H_Y,
+        sparse=True,
+        perfect_first_round=perfect_first_round,
+        perfect_last_round=perfect_last_round,
     )
     logical_ops = compute_logical_operators(H_X, H_Z, H_Y)
 
@@ -260,7 +274,14 @@ def run_experiment(
     try:
         for s in range(shots):
             e_full, true_residual = sample_shot(
-                rng, mode, n, r, m_total, noise, perfect_first_round
+                rng,
+                mode,
+                n,
+                r,
+                m_total,
+                noise,
+                perfect_first_round=perfect_first_round,
+                perfect_last_round=perfect_last_round,
             )
             # Detector (syndrome) pattern triggered by this shot's faults.
             detectors = (H_st @ e_full) % 2

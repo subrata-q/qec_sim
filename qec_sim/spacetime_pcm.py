@@ -34,6 +34,44 @@ def build_delta_r(r: int) -> np.ndarray:
     return delta
 
 
+def meas_rounds(
+    r: int, perfect_first_round: bool = False, perfect_last_round: bool = False
+) -> int:
+    """Number of rounds that carry measurement noise.
+
+    Each idealized round drops its own block of `m_total` measurement-flip
+    columns from the space-time PCM, so this is the one number that
+    `generate_space_time_pcm`, `error_model.sample_shot` and
+    `error_model.build_priors` must all agree on. They call it rather than
+    recomputing it, since a disagreement shows up only as a column-count
+    mismatch deep inside the decoder.
+
+    Args:
+        r: Number of rounds.
+        perfect_first_round: Whether round 0's measurements are noiseless.
+        perfect_last_round: Whether round `r-1`'s measurements are noiseless.
+
+    Returns:
+        `r` minus the number of idealized rounds.
+
+    Raises:
+        ValueError: If `r < 1`, or if idealizing leaves no noisy round --
+            `r=1` with either flag, or `r=2` with both. There would be no
+            measurement columns at all, which is a silently wrong model
+            rather than a useful one.
+    """
+    if r < 1:
+        raise ValueError("r must be at least 1.")
+    idealized = int(bool(perfect_first_round)) + int(bool(perfect_last_round))
+    if idealized >= r:
+        raise ValueError(
+            f"r={r} with perfect_first_round={bool(perfect_first_round)} and "
+            f"perfect_last_round={bool(perfect_last_round)} leaves no noisy "
+            "round; at least one round must carry measurement noise."
+        )
+    return r - idealized
+
+
 def build_spatial_matrix(
     H_X: np.ndarray, H_Z: np.ndarray | None = None, H_Y: np.ndarray | None = None
 ) -> np.ndarray:
@@ -88,6 +126,7 @@ def generate_space_time_pcm(
     H_Y: np.ndarray | None = None,
     sparse: bool = True,
     perfect_first_round: bool = False,
+    perfect_last_round: bool = False,
 ):
     """Generate the full space-time PCM over `r` rounds.
 
@@ -115,15 +154,33 @@ def generate_space_time_pcm(
             return a dense uint8 `numpy.ndarray`.
         perfect_first_round: If True, model round 0's measurements as
             noiseless: its `m_total` measurement-flip columns are omitted
-            entirely (the first block column of `delta_r`), leaving
-            `r*n_cols + (r-1)*m_total` columns. Data columns keep their
-            positions, since the omitted block is at the tail. Callers
-            must pass the same flag to `error_model.sample_shot` and
-            `error_model.build_priors` so the column orders still agree.
+            entirely (the first block column of `delta_r`).
+        perfect_last_round: If True, model round `r-1`'s measurements as
+            noiseless, omitting the *last* block column of `delta_r`. This
+            is what closes the time boundary: a measurement flip in round
+            `i` normally lights up detectors `i` and `i+1`, but in the
+            final round there is no detector `i+1` to catch it, so it is
+            indistinguishable from a data fault. A larger code has more
+            checks to flip in that unprotected round, which can make more
+            rounds and bigger codes decode *worse*. A real memory
+            experiment closes the boundary with a final noiseless readout
+            of the data qubits; this flag models that.
+
+    Either flag leaves `r*n_cols + meas_rounds(...)*m_total` columns. Data
+    columns keep their positions in both cases, since the omitted blocks
+    are inside the tail. Callers must pass the same flags to
+    `error_model.sample_shot` and `error_model.build_priors` so the column
+    orders still agree.
 
     Returns:
         The space-time PCM, mod-2 reduced, in sparse or dense form.
+
+    Raises:
+        ValueError: If idealizing leaves no noisy round (see `meas_rounds`).
     """
+    # Validates the flag combination before anything is allocated.
+    meas_rounds(r, perfect_first_round, perfect_last_round)
+
     H_spatial = build_spatial_matrix(H_X, H_Z, H_Y)
     m_total, _ = H_spatial.shape
     delta_r = build_delta_r(r)
@@ -132,6 +189,10 @@ def generate_space_time_pcm(
         # carry no information -- drop delta_r's first block column. The
         # round-0 detectors then depend only on round-0 data faults.
         delta_r = delta_r[:, 1:]
+    if perfect_last_round:
+        # Likewise for the final round, at the other end: its column is the
+        # only one with no downstream detector to close it off.
+        delta_r = delta_r[:, :-1]
 
     Hs = csr_matrix(H_spatial)
     Ir = eye(r, format="csr", dtype=np.uint8)
